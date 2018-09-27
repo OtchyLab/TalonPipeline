@@ -23,7 +23,7 @@ function varargout = Metermeter2(varargin)
 
 % Edit the above text to modify the response to help Metermeter2
 
-% Last Modified by GUIDE v2.5 27-Sep-2018 15:57:51
+% Last Modified by GUIDE v2.5 27-Sep-2018 15:43:55
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -910,9 +910,7 @@ switch tempSelect
         
         %Push vars to base workspace if selected
         if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'means', means(:,vals))
-            assignin('base', 'stds', stds(:,vals))
+            assignin('base', 'time', 
         end
         
     %All interval durations
@@ -942,12 +940,6 @@ switch tempSelect
         end
         title('Interval Durations');
     
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', dt-zeroDay)
-            assignin('base', 'durations', ints(:,vals))
-        end
-        
     %CV    
     case 3 
         %Run stats
@@ -972,12 +964,6 @@ switch tempSelect
         end
         title('Duration Coefficient of Variation');
         
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'cvs', cvs(:,vals))
-        end
-        
     %Motif fraction
     case 4 
         %Run stats
@@ -1001,13 +987,6 @@ switch tempSelect
             ylabel('Motif Fraction (%)')
         end
         title('Motif Fraction (M+/-Std)');
-        
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'means', means(:,vals))
-            assignin('base', 'stds', stds(:,vals))
-        end
 end
 
 %Final axis formatting
@@ -1017,7 +996,7 @@ hold off
 
 guidata(hObject, handles);
 
-function push_saveParsed_Callback(hObject, eventdata, handles)
+function push_tempSave_Callback(hObject, eventdata, handles)
 %This function only exports minimimally processed data (essentially the
 %parseData output.
 
@@ -1324,13 +1303,17 @@ function check_flags_Callback(hObject, eventdata, handles)
 
 function check_rms_Callback(hObject, eventdata, handles)
 
+function push_motifSim_Callback(hObject, eventdata, handles)
+
+function push_yinPitch_Callback(hObject, eventdata, handles)
+
+
+
+guidata(hObject, handles);
 
 function push_syls2Disk_Callback(hObject, eventdata, handles)
 % Cut up syllables into snips and write to disk for analysis elsewhere
-
-%Request the location for saving files
-parent = uigetdir(cd, 'Where to save these syllables?');
-
+parent = 'C:\Users\Tim\Desktop\MM2 Test Data\SAP Test\';
 %Parse Data
 handles.pData = parseData(handles);
 
@@ -1357,8 +1340,9 @@ for i = 1:numBins
         %Write each to disk
         for k = 1:numel(subSet)
             fname = [parent filesep fold1 filesep fold2 filesep num2str(k) '.wav'];
-            audiowrite(fname, subSet{k}, 44150);
+            wavwrite(subSet{k}, 44150, fname);
         end
+        
     end
     
     %Update waitbar
@@ -1382,6 +1366,43 @@ save([SavePath SaveName],'datasets');
 
 %Notify user when done
 set(handles.text_message, 'String', ['Raw data saved to file at: ' SaveName]);
+
+function push_saveParsed_Callback(hObject, eventdata, handles)
+%Kludged together to save the results of spectral recovery data
+
+%Get the intervals to plot
+ints = get(handles.listbox_simIntSelect, 'Value');
+contents = get(handles.listbox_simIntSelect, 'String');
+dataOut.dataType = contents(ints);
+
+%Retrieve selected parameters from the model structure
+scores = getStructField(handles.simAnalysis, 'accScores', 1);
+days = getStructField(handles.simAnalysis, 'dt');
+
+%Get zeroDay for plotting
+zeroDay = datenum(get(handles.edit_zeroDay, 'String'), 'mm/dd/yy');
+dataOut.time = days-zeroDay;
+
+%If selected, plot individual intervals
+mSyl = []; sSyl = [];
+for i = 1:numel(ints)
+    %Calc descriptive stats for each syllable
+    mSyl(:,i) = squeeze(nanmean(scores(:,:,ints(i)), 2));
+    sSyl(:,i) = squeeze(nanstd(scores(:,:,ints(i)), 1, 2));
+end
+dataOut.sylM = mSyl;
+dataOut.sylS = sSyl;
+
+dataOut.parseTime = str2num(get(handles.edit_parseTimes,'String'));
+dataOut.parseNum = str2num(get(handles.edit_numMotifs,'String'));
+dataOut.normed = get(handles.check_norm, 'Value');
+dataOut.normRef = get(handles.list_norm,'Value');
+dataOut.fileSets = get(handles.list_norm,'String');
+
+[SaveName,SavePath] = uiputfile('*.mat');
+save([SavePath SaveName],'dataOut');
+
+
 
 function push_saveFinal_Callback(hObject, eventdata, handles)
 dataOut = handles.saveData;
@@ -1440,3 +1461,5 @@ end
 function check_norm_Callback(hObject, eventdata, handles)
 
 function push_test1_Callback(hObject, eventdata, handles)
+
+

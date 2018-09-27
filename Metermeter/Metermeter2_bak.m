@@ -1,4 +1,3 @@
-
 function varargout = Metermeter2(varargin)
 % METERMETER2 MATLAB code for Metermeter2.fig
 %      METERMETER2, by itself, creates a new METERMETER2 or raises the existing
@@ -23,7 +22,7 @@ function varargout = Metermeter2(varargin)
 
 % Edit the above text to modify the response to help Metermeter2
 
-% Last Modified by GUIDE v2.5 27-Sep-2018 15:57:51
+% Last Modified by GUIDE v2.5 03-Jul-2018 09:12:20
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -52,12 +51,11 @@ handles.symbolcell ={'s','o', 'x',  '+', '*', 's','o', 'x',  '+', '*', 's','o', 
 
 %Format axis
 axes(handles.axes1)
-set(gca, 'Box', 'off', 'TickDir', 'out', 'LineWidth', 1, 'FontSize', 10)
+set(gca, 'Box', 'off', 'TickDir', 'out', 'LineWidth', 1, 'FontSize', 14)
 
 %Default values for selection boxes
 set(handles.radio_SylsGaps,'Value',0);
 set(handles.radio_SylNGap,'Value',1);
-set(handles.popup_tempSelect,'Value',1);
 
 % Choose default command line output for Metermeter2
 handles.output = hObject;
@@ -149,7 +147,7 @@ for i = 1:numDatasets
         
         %Apply index
         pData(s).intervals = handles.dataset(i).intervals(idx,:);
-        pData(s).filenames = handles.dataset(i).renditionFilenames(idx);
+        pData(s).filenames = handles.dataset(i).renditionFilenames(idx); % keeps overwriting???
         pData(s).date = handles.dataset(i).dateVect(idx);
         pData(s).time = handles.dataset(i).timeVect(idx);
         
@@ -231,17 +229,118 @@ for i = 1:n
     dataOut(:,i) = dataIn(:,i)./mean(dataIn(ind,i));
 end
 
+function out = normSignal(in)
+%Normalize the input signal so the RMS = 1
+
+rms = sqrt(mean(in.^2));
+
+out = in./rms;
+
+function filtAudio = Prep(handles,audio,idx)
+%Constants for Bandpass Audio (300-6500kHz)
+gain = handles.prep.gain(idx);
+hp = handles.prep.hp(idx);
+lp = handles.prep.lp(idx);
+
+HP_fNorm = hp/(44150/2);
+LP_fNorm = lp/(44150/2);
+[BP_b,BP_a] = butter(4,[HP_fNorm LP_fNorm]);
+
+if get(handles.check_rms, 'Value')
+    audio = cellfun(@(x) normSignal(x), audio, 'UniformOutput', 0);
+end
+
+filtAudio = cellfun(@(x) filtfilt(BP_b, BP_a, gain*(x-mean(x))), audio, 'UniformOutput', 0);
+
+% filtAudio = audio;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%         Plotting Functions             %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function handles = formatAxis(handles, legInfo)
 %Standardize formatting of the main output axes
-fS = 11;
-set(gca, 'Box', 'off', 'TickDir', 'out', 'LineWidth', 1.5, 'FontSize', fS)
-% xlabel('FontSize', fS)
-% ylabel('FontSize', fS)
-% title('FontSize', fS);
+fS = 14;
+set(gca, 'Box', 'off', 'TickDir', 'out', 'LineWidth', 2, 'FontSize', fS)
+xlabel([], 'FontSize', fS)
+ylabel([], 'FontSize', fS)
+title([], 'FontSize', fS);
 legend(legInfo, [225,75,10,5], 'Orientation', 'horizontal'); legend('boxoff')
 
-function handles = plotVarComp(handles)
+function handles = plotTempAnalysis(handles)
 
+% get the value in the dropdown menu
+plotType = get(handles.popup_tempAnalysis, 'Value');
+  if plotType == 1
+    % SimpleMean
+
+    %Plot output
+    if get(handles.check_exportPlot, 'Value')
+        figure;
+    else
+        axes(handles.axes1);
+    end
+    cla; hold on
+    for i = 1:length(handles.vals)
+        errorbar(handles.dt-handles.zeroDay, handles.int_m(:,i), handles.int_std(:,i), [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
+    end
+    axis auto
+    handles = formatAxis(handles, handles.contents(handles.vals));
+    xlabel('Time (Days)')
+    if get(handles.check_norm, 'Value')
+        ylabel('Norm Duration (%)')
+    else
+        ylabel('Duration (ms)')
+    end
+    title('Mean Motif Length');
+    hold off
+  elseif plotType == 2
+    % plot all
+    %Plot output
+    if get(handles.check_exportPlot, 'Value')
+        figure;
+    else
+        axes(handles.axes1);
+    end
+    cla; hold on
+    for i = 1:length(handles.vals)
+    %   scatter(handles.dt, handles.int(:,i), ['.' handles.colorcell{i}], 'jitter', 'on', 'jitterAmount', .25)
+        scatter(handles.alldt - handles.zeroDay, handles.int(:,i), ['.' handles.colorcell{i}])
+    end
+
+    axis auto
+    handles = formatAxis(handles, handles.contents(handles.vals));
+    xlabel('Time (Days)')
+    if get(handles.check_norm, 'Value')
+        ylabel('Norm Duration (%)')
+    else
+        ylabel('Duration (ms)')
+    end
+    title('Motif Length');
+    hold off
+  elseif plotType == 3
+    % SimpleCV
+    %Plot output
+    if get(handles.check_exportPlot, 'Value')
+        figure;
+    else
+        axes(handles.axes1);
+    end
+    cla; hold on
+    for i = 1:length(handles.vals)
+        plot(handles.dt-handles.zeroDay, handles.int_cv(:,i), [':' handles.symbolcell{i} handles.colorcell{i}])
+    end
+    axis auto
+    handles = formatAxis(handles, handles.contents(handles.vals));
+    xlabel('Day & Time')
+    if get(handles.check_norm, 'Value')
+        ylabel('Norm CV (%)')
+    else
+        ylabel('CV (ms)')
+    end
+    hold off
+  end
+
+function handles = plotVarComp(handles)
 %Get the intervals to plot
 ints = get(handles.listbox_varIntSelect, 'Value');
 
@@ -318,13 +417,22 @@ ylabel('Param (ms)')
 title('Variance Decomposition');
 hold off
 
-function handles = plotSimAnalysis(handles)
-%Get the intervals to plot
+function handles = plotSimAnalysis(handles, caller)
+% caller: 1 for syllable similarity, 0 for syllable recovery
+%Get the intervals (syllables) to plot
+% whatever is selected in the box next to the buttons?
 ints = get(handles.listbox_simIntSelect, 'Value');
 
 %Retrieve selected parameters from the model structure
-score = getStructField(handles.simAnalysis, 'accScores', 1);
-days = getStructField(handles.simAnalysis, 'dt');
+% I don't know what this is doing... should look at what the simAnalysis
+% field contains
+if caller
+    score = getStructField(handles.simAnalysis, 'accScores', 1);
+    days = getStructField(handles.simAnalysis, 'dt');
+else
+    score = getStructField(handles.recAnalysis, 'accScores', 1);
+    days = getStructField(handles.recAnalysis, 'dt');
+end
 
 %Convert to variability, if selected
 if false
@@ -335,8 +443,9 @@ else
     scores = score;
 end
 
-
 %Plot output
+% if "Export plot" box is checked, create a new figure in which to plot
+% stuff. Otherwise, do it on the GUI axis
 if get(handles.check_exportPlot, 'Value')
     figure;
 else
@@ -356,7 +465,7 @@ if get(handles.check_showSimInts, 'Value')
         sSyl  = squeeze(nanstd(scores(:,:,ints(i)), 1, 2));
         
         %Plot the output per syllable
-        errorbar(days-zeroDay, mSyl, sSyl, [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
+        errorbar(days, mSyl, sSyl, [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
     end
     leg = [leg, handles.sLabels(ints)];
 end
@@ -385,7 +494,7 @@ if get(handles.check_mSimSyls, 'Value')
     sParam = std((nanmean(scores(:,:,ints), 2)), 1, 3);
     
     %Plot to axis with the heavy weight and unique marker
-    shadedErrorBar(days-zeroDay, mParam, sParam, 'k', 1)
+    shadedErrorBar(days, mParam, sParam, 'k', 1)
     leg = [leg; {'mSyl'}];
 end
 
@@ -396,134 +505,8 @@ ylabel('Variability (ADU)')
 title('SAP Variability');
 hold off
 
-function out = normSignal(in)
-%Normalize the input signal so the RMS = 1
-
-rms = sqrt(mean(in.^2));
-
-out = in./rms;
-
-function filtAudio = Prep(handles,audio,idx)
-%Constants for Bandpass Audio (300-6500kHz)
-gain = handles.prep.gain(idx);
-hp = handles.prep.hp(idx);
-lp = handles.prep.lp(idx);
-
-HP_fNorm = hp/(44150/2);
-LP_fNorm = lp/(44150/2);
-[BP_b,BP_a] = butter(4,[HP_fNorm LP_fNorm]);
-
-if get(handles.check_rms, 'Value')
-    audio = cellfun(@(x) normSignal(x), audio, 'UniformOutput', 0);
-end
-
-filtAudio = cellfun(@(x) filtfilt(BP_b, BP_a, gain*(x-mean(x))), audio, 'UniformOutput', 0);
-
-function [dt, means, stds] = tempSimple(pData, intType)
-%Do the stats on the parsed data
-numBins = length(pData);
-for i = 1:numBins
-    
-    if ~intType %(Syl+Gap)
-       %Combine syllable and the following gap 
-       ints = [];
-       numInts = size(pData(i).intervals,2);
-       rm = 1:2:numInts;
-       idx = 1;
-       for j = rm(1:end-1)
-          ints(:,idx) = pData(i).intervals(:,j)+pData(i).intervals(:,j+1);
-          idx = idx+1;
-       end
-       ints(:,idx) = pData(i).intervals(:,end);
-       
-       
-       %sum stats
-        means(i,:) = mean(ints,1);
-        stds(i,:) = std(ints,1,1);
-        
-    else %Syl and Gap
-        %sum stats
-        means(i,:) = mean(pData(i).intervals,1);
-        stds(i,:) = std(pData(i).intervals,1,1);
-
-    end
-    
-    %Calc/format timepoints
-    dt(i) = mean(pData(i).date',1) + mean(pData(i).time',1)/24;    
-
-end
-
-function [dt, int_out, indx] = tempAll(pData, intType)
-%Plot all of the intervals as scatter plot
-numBins = length(pData);
-int_out = [];
-dt = [];
-
-for i = 1:numBins
-    len = size(pData(i).intervals,1);
-    indx{i} = (size(int_out,1)+1):(size(int_out,1)+len);
-    
-    %Fix the syl/gap issue
-    int = [];
-    if ~intType %(Syl+Gap)
-       %Combine syllable and the following gap 
-       numInts = size(pData(i).intervals,2);
-       rm = 1:2:numInts;
-       idx = 1;
-       for j = rm(1:end-1)
-          int(:,idx) = pData(i).intervals(:,j)+pData(i).intervals(:,j+1);
-          idx = idx+1;
-       end
-       int(:,idx) = pData(i).intervals(:,end);
-       
-    else %Syl and Gap
-        int = pData(i).intervals;
-
-    end
-    
-    %Insert into the output structure
-    int_out(indx{i},:) = int;
-    
-    %Calc/format timepoints
-    dt(indx{i}) = (pData(i).date + (pData(i).time/24));
-
-end
-
-function [dt, means, stds] = tempMotifFrac(pData, intType)
-%Do the stats on the parsed data
-numBins = length(pData);
-for i = 1:numBins
-    ints = [];
-    if ~intType %(Syl+Gap)
-       %Combine syllable and the following gap 
-       numInts = size(pData(i).intervals,2);
-       rm = 1:2:numInts;
-       idx = 1;
-       for j = rm(1:end-1)
-          ints(:,idx) = pData(i).intervals(:,j)+pData(i).intervals(:,j+1);
-          idx = idx+1;
-       end
-       ints(:,idx) = pData(i).intervals(:,end);
-        
-    else %Syl and Gap
-        ints = pData(i).intervals;
-    end
-    
-    %Calc motif fraction
-    totals = sum(ints,2);
-    motifFract = ints./totals;
-    
-    %sum stats
-    means(i,:) = mean(motifFract,1);
-    stds(i,:) = std(motifFract,1,1);
-
-    %Calc/format timepoints
-    dt(i) = mean(pData(i).date',1) + mean(pData(i).time',1)/24;    
-
-end
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Data load functions
+%%%   Data load functions            %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function push_addDataset_Callback(hObject, eventdata, handles)
@@ -579,9 +562,9 @@ else
         end
         
         %Set the message to show annotation replaced
-        set(handles.listbox_datasets,'String',handles.datatitles)
+        set(handles.listbox_datasets,'String',handles.datatitles);
         set(handles.text_message,'String',['Added ' num2str(i) ' new datasets to the active list']);
-        
+        set(handles.push_loadDataset, 'BackgroundColor', [0 1 0]);
     end
 end
 
@@ -617,7 +600,7 @@ else
     numDatasets = numel(handles.datasetFilename);
 
 % %Talon output structure:
-% filenames = filt_keys(handles.chosenStartSeq(:,1));
+%  filenames = filt_keys(handles.chosenStartSeq(:,1));
 % filenums = filt_filenums(handles.chosenStartSeq(:,1));
 % sequence = contents(get(handles.popup_seqSylls,'Value'),:);
 % 
@@ -741,12 +724,13 @@ end
 %Update parse names
 handles.parseNames = updateParseNames(handles);
 set(handles.list_norm, 'String', handles.parseNames);
+set(handles.popup_specAnalysis, 'String', handles.parseNames);
 
 %Update Interval list
 if get(handles.radio_SylsGaps, 'Value')
-    set(handles.list_SylGap, 'String', handles.sgLabels, 'Value', 1)
+    set(handles.list_SylGap, 'String', [handles.sgLabels; 'Total'], 'Value', 1)
 elseif get(handles.radio_SylNGap, 'Value')
-    set(handles.list_SylGap, 'String', handles.sNgLabels, 'Value', 1)
+    set(handles.list_SylGap, 'String', [handles.sNgLabels; 'Total'], 'Value', 1)
 end
 
 %Update zero day
@@ -762,17 +746,15 @@ end
 
 guidata(hObject, handles);
 
+%%% FIND A BETTER PLACE FOR THESE THREE
+
 function check_tempOnly_Callback(hObject, eventdata, handles)
 
 function listbox_datasets_Callback(hObject, eventdata, handles)
 
-function listbox_datasets_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Parsing functions
+%  Interval Selection Panel Callbacks  %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function edit_parseTimes_Callback(hObject, eventdata, handles)
@@ -782,24 +764,18 @@ set(handles.list_norm, 'String', handles.parseNames);
 
 guidata(hObject, handles);
 
-function edit_parseTimes_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
+
 
 function edit_numMotifs_Callback(hObject, eventdata, handles)
 
-function edit_numMotifs_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 function edit_zeroDay_Callback(hObject, eventdata, handles)
 
-function edit_zeroDay_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%      Temporal Analysis Callbacks          %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function list_SylGap_Callback(hObject, eventdata, handles)
 
@@ -819,7 +795,7 @@ end
 
 %Update the listbox values
 if isfield(handles, 'sgLabels')
-    set(handles.list_SylGap, 'String', handles.sgLabels, 'Value', 1)
+    set(handles.list_SylGap, 'String', [handles.sgLabels; 'Total'], 'Value', 1)
 end
 
 guidata(hObject, handles);
@@ -835,7 +811,7 @@ end
 
 %Update the listbox values
 if isfield(handles, 'sgLabels')
-    set(handles.list_SylGap, 'String', handles.sNgLabels, 'Value', 1)
+    set(handles.list_SylGap, 'String', [handles.sNgLabels; 'Total'], 'Value', 1)
 end
 
 guidata(hObject, handles);
@@ -843,191 +819,13 @@ guidata(hObject, handles);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Temporal Analysis functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function popup_tempSelect_Callback(hObject, eventdata, handles)
-%On new selectrion, clear the plot axis
-axes(handles.axes1); cla
+
+function push_motifFrac_Callback(hObject, eventdata, handles)
+% Fill this in!!!
 
 guidata(hObject, handles);
 
-function popup_tempSelect_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function push_tempPlot_Callback(hObject, eventdata, handles)
-%Main calling function for the temporal analysis scripts
-
-%Select the plotting axis
-if get(handles.check_exportPlot, 'Value')
-    figure;
-else
-    axes(handles.axes1);
-end
-cla; hold on
-
-%Get zeroDay for plotting
-zeroDay = datenum(get(handles.edit_zeroDay, 'String'), 'mm/dd/yy');
-
-%Get interval selections from GUI controls
-vals = get(handles.list_SylGap, 'Value');
-contents = get(handles.list_SylGap, 'String');
-numConts = numel(contents);
-if get(handles.radio_SylsGaps,'Value')
-    intType = 1;
-else
-    intType = 0;
-end
-
-%Parse data acoording to user selections
-handles.pData = parseData(handles);
-
-%Based on the popup selections, run the analysis and plotting subroutines specified
-tempSelect = get(handles.popup_tempSelect, 'Value');
-switch tempSelect
-    %Simple mean +/- std
-    case 1 
-        %Run stats
-        [dt, means, stds] = tempSimple(handles.pData, intType);
-        
-        %Normalize if requested
-        if get(handles.check_norm, 'Value')
-            stds = stds./means;
-            means = normData(get(handles.list_norm,'Value'), means);
-        end
-        
-        %Plot simple output
-        for i = 1:length(vals)
-            errorbar(floor(dt)-zeroDay, means(:,vals(i)), stds(:,vals(i)), [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
-        end
-        
-        %Set labels
-        if get(handles.check_norm, 'Value')
-            ylabel('Norm Duration (%)')
-        else
-            ylabel('Duration (ms)')
-        end
-        title('Interval Durations (M+/-Std)');
-        
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'means', means(:,vals))
-            assignin('base', 'stds', stds(:,vals))
-        end
-        
-    %All interval durations
-    case 2 
-        %Run stats
-        [dt, ints, indx] = tempAll(handles.pData, intType);
-        
-        %Normalize if requested
-        if get(handles.check_norm, 'Value')
-            mInd = [];
-            for i = get(handles.list_norm,'Value')
-                mInd = [mInd indx{i}];
-            end
-            ints = normData(mInd, ints);
-        end
-
-        %Plot simple output
-        for i = 1:length(vals)
-            scatter(dt-zeroDay, ints(:,vals(i)), ['.' handles.colorcell{i}])
-        end
-        
-        %Set labels
-        if get(handles.check_norm, 'Value')
-            ylabel('Norm Duration (%)')
-        else
-            ylabel('Duration (ms)')
-        end
-        title('Interval Durations');
-    
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', dt-zeroDay)
-            assignin('base', 'durations', ints(:,vals))
-        end
-        
-    %CV    
-    case 3 
-        %Run stats
-        [dt, means, stds] = tempSimple(handles.pData, intType);
-        cvs = stds./means;
-        
-        %Normalize if requested
-        if get(handles.check_norm, 'Value')
-            cvs = normData(get(handles.list_norm,'Value'), cvs);
-        end
-        
-        %Plot simple output
-        for i = 1:length(vals)
-            plot(floor(dt)-zeroDay, cvs(:,vals(i)), [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
-        end
-        
-        %Set labels
-        if get(handles.check_norm, 'Value')
-            ylabel('Norm CV')
-        else
-            ylabel('CV (%)')
-        end
-        title('Duration Coefficient of Variation');
-        
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'cvs', cvs(:,vals))
-        end
-        
-    %Motif fraction
-    case 4 
-        %Run stats
-        [dt, means, stds] = tempMotifFrac(handles.pData, intType);
-        
-        %Normalize if requested
-        if get(handles.check_norm, 'Value')
-            stds = stds./means;
-            means = normData(get(handles.list_norm,'Value'), means);
-        end
-        
-        %Plot simple output
-        for i = 1:length(vals)
-            errorbar(floor(dt)-zeroDay, means(:,vals(i)), stds(:,vals(i)), [':' handles.symbolcell{i} handles.colorcell{i}], 'LineWidth', 1.5)
-        end
-        
-        %Set labels
-        if get(handles.check_norm, 'Value')
-            ylabel('Norm Motif Fraction')
-        else
-            ylabel('Motif Fraction (%)')
-        end
-        title('Motif Fraction (M+/-Std)');
-        
-        %Push vars to base workspace if selected
-        if get(handles.check_pushVars, 'Value')
-            assignin('base', 'time', floor(dt)-zeroDay)
-            assignin('base', 'means', means(:,vals))
-            assignin('base', 'stds', stds(:,vals))
-        end
-end
-
-%Final axis formatting
-handles = formatAxis(handles, contents(vals));
-xlabel('Time (Days)')
-hold off
-
-guidata(hObject, handles);
-
-function push_saveParsed_Callback(hObject, eventdata, handles)
-%This function only exports minimimally processed data (essentially the
-%parseData output.
-
-%Get the intervals to plot
-pData = parseData(handles);
-
-[SaveName,SavePath] = uiputfile('*.mat');
-save([SavePath SaveName],'pData');
-
-function check_pushVars_Callback(hObject, eventdata, handles)
+function check_sumInts_Callback(hObject, eventdata, handles)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Variance Decomposition functions
@@ -1065,67 +863,52 @@ close(h)
 set(handles.listbox_varIntSelect, 'String', handles.sgLabels);
 
 %Plot the output given user selections
-handles = plotVarComp(handles);
-
-%Copy useful data out to save structure
-% handles.saveData = [];
-% handles.saveData.time = dt-zeroDay;
-% handles.saveData.int_m = int_m;
-% handles.saveData.int_std = int_std;
-% 
-% handles.saveData.dataType = contents(vals);
-% handles.saveData.parseTime = str2num(get(handles.edit_parseTimes,'String'));
-% handles.saveData.parseNum = str2num(get(handles.edit_numMotifs,'String'));
-% handles.saveData.normed = get(handles.check_norm, 'Value');
-% handles.saveData.normRef = get(handles.list_norm,'Value');
-% handles.saveData.fileSets = get(handles.list_norm,'String');
+%handles = plotVarComp(handles);
+set(handles.text_message,'String','Variance decomposition complete!')
 
 guidata(hObject, handles);
 
 function popup_varPSelect_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'varComp')
-    set(handles.text_message, 'String', 'You need to run the Decompposition before you can plot parameters')
-else
-    handles = plotVarComp(handles);
-end
+%if ~isfield(handles, 'varComp')
+%    set(handles.text_message, 'String', 'You need to run the Decompposition before you can plot parameters')
+%else
+%    handles = plotVarComp(handles);
+%end
 
-guidata(hObject, handles);
+%guidata(hObject, handles);
 
-function popup_varPSelect_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
+
 
 function check_showVarInts_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'varComp')
-    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
-else
-    handles = plotVarComp(handles);
-end
+%if ~isfield(handles, 'varComp')
+%    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
+%else
+%    handles = plotVarComp(handles);
+%end
 
-guidata(hObject, handles);
+%guidata(hObject, handles);
 
 function check_mGaps_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'varComp')
-    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
-else
-    handles = plotVarComp(handles);
-end
+%if ~isfield(handles, 'varComp')
+%    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
+%else
+%    handles = plotVarComp(handles);
+%end
 
-guidata(hObject, handles);
+%guidata(hObject, handles);
 
 function check_mVarSyls_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'varComp')
-    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
-else
-    handles = plotVarComp(handles);
-end
+%if ~isfield(handles, 'varComp')
+%    set(handles.text_message, 'String', 'You need to run the Decomposition before you can plot parameters')
+%else
+%    handles = plotVarComp(handles);
+%end
 
-guidata(hObject, handles);
+%guidata(hObject, handles);
 
 function listbox_varIntSelect_Callback(hObject, eventdata, handles)
 
@@ -1146,7 +929,7 @@ if isfield(handles, 'simAnalysis')
     handles = rmfield(handles, 'simAnalysis');
 end
 
-%Parse Data
+%Parse Data...what does this do???
 handles.pData = parseData(handles);
 
 %Do the similarity analysis on each of the binned sets
@@ -1159,6 +942,7 @@ handles.prep.lp = [8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8
 
 %Cycle through each binned dataset, load from file, and extract needed info.
 h = waitbar(0,'Running Similarity Analysis on each data bin. Please wait...');
+zeroDay = datenum(get(handles.edit_zeroDay, 'String'), 'mm/dd/yy');
 for i = 1:numBins
     %Extract syllables from the motifs
     sylSnips = extractSyllables(handles, handles.pData(i), i);
@@ -1182,30 +966,19 @@ for i = 1:numBins
 
     %Calc/format timepoints
     handles.simAnalysis(i).dt = (handles.pData(i).date(1) + (handles.pData(i).time(1)/24));
-    
+    handles.simAnalysis(i).dt = handles.simAnalysis(i).dt - zeroDay;
     %Update waitbar
     waitbar(i/numBins)
 end
 close(h) 
 
+% subtract zero day from simAnalysis.dt
+
+%handles.simAnalysis.dt = handles.simAnalysis(i).dt - zeroDay;
+
 % If the decomposition has completed, populate the selection box with the full set of intervals
 set(handles.listbox_simIntSelect, 'String', handles.sLabels);
 
-%Plot the output given user selections
-% handles = plotSimAnalysis(handles);
-
-%Copy useful data out to save structure
-% handles.saveData = [];
-% handles.saveData.time = dt-zeroDay;
-% handles.saveData.int_m = int_m;
-% handles.saveData.int_std = int_std;
-% 
-% handles.saveData.dataType = contents(vals);
-% handles.saveData.parseTime = str2num(get(handles.edit_parseTimes,'String'));
-% handles.saveData.parseNum = str2num(get(handles.edit_numMotifs,'String'));
-% handles.saveData.normed = get(handles.check_norm, 'Value');
-% handles.saveData.normRef = get(handles.list_norm,'Value');
-% handles.saveData.fileSets = get(handles.list_norm,'String');
 
 guidata(hObject, handles);
 
@@ -1213,9 +986,11 @@ guidata(hObject, handles);
 function push_recovery_Callback(hObject, eventdata, handles)
 % Run the SAP-style syllable recovery analysis
 
+% giving this data its own handle field: recAnalysis
+
 %Reset the storage variable if it exists
-if isfield(handles, 'simAnalysis')
-    handles = rmfield(handles, 'simAnalysis');
+if isfield(handles, 'recAnalysis')
+    handles = rmfield(handles, 'recAnalysis');
 end
 
 %Parse Data
@@ -1230,7 +1005,7 @@ handles.prep.hp = [300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 3
 handles.prep.lp = [8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500, 8500]; 
 
 %Retrieve the reference/baseline data from the "Interval Selection" listbox
-pntr = get(handles.list_norm,'Value');
+pntr = get(handles.popup_specAnalysis,'Value');
 if numel(pntr)~=1
     set(text.message,'String', 'You must select one (and only one) reference day for the recovery analysis.')
     return
@@ -1238,6 +1013,8 @@ end
 
 REFsylSnips = extractSyllables(handles, handles.pData(pntr), pntr);
 % REFdurs = diff(handles.pData(pntr).templatesyllBreaks,1,2)';
+
+zeroDay = datenum(get(handles.edit_zeroDay, 'String'), 'mm/dd/yy');
 
 %Cycle through each binned dataset, load from file, and extract needed info.
 h = waitbar(0,'Running Recovery Analysis on each data bin. Please wait...');
@@ -1259,13 +1036,14 @@ for i = 1:numBins
 %         subSet = Prep(handles,subSet);
         
         %Run similarity analysis on the syllable subset
-        [handles.simAnalysis(i).accScores(:, j), handles.simAnalysis(i).simScores(:, j), ~] = batchSapRecovery(subSet, durs(j), REFsubSet);       
+        [handles.recAnalysis(i).accScores(:, j), handles.recAnalysis(i).simScores(:, j), ~] = batchSapRecovery(subSet, durs(j), REFsubSet);       
         
     end
 
     %Calc/format timepoints
-    handles.simAnalysis(i).dt = (handles.pData(i).date(1) + (handles.pData(i).time(1)/24));
-    
+    handles.recAnalysis(i).dt = (handles.pData(i).date(1) + (handles.pData(i).time(1)/24));
+    % subtract zero day from dates/times
+    handles.recAnalysis(i).dt = handles.recAnalysis(i).dt - zeroDay;
     %Update waitbar
     waitbar(i/numBins)
 end
@@ -1274,63 +1052,46 @@ close(h)
 % If the decomposition has completed, populate the selection box with the full set of intervals
 set(handles.listbox_simIntSelect, 'String', handles.sLabels);
 
-%Plot the output given user selections
-% handles = plotSimAnalysis(handles);
-
-%Copy useful data out to save structure
-% handles.saveData = [];
-% handles.saveData.time = dt-zeroDay;
-% handles.saveData.int_m = int_m;
-% handles.saveData.int_std = int_std;
-% 
-% handles.saveData.dataType = contents(vals);
-% handles.saveData.parseTime = str2num(get(handles.edit_parseTimes,'String'));
-% handles.saveData.parseNum = str2num(get(handles.edit_numMotifs,'String'));
-% handles.saveData.normed = get(handles.check_norm, 'Value');
-% handles.saveData.normRef = get(handles.list_norm,'Value');
-% handles.saveData.fileSets = get(handles.list_norm,'String');
-
 guidata(hObject, handles);
 
 
 function check_mSimSyls_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'simAnalysis')
-    set(handles.text_message, 'String', 'You need to run the Similarity Analysis before you can plot parameters')
-else
-    handles = plotSimAnalysis(handles);
-end
-
-guidata(hObject, handles);
+%if ~isfield(handles, 'simAnalysis')
+%    set(handles.text_message, 'String', 'You need to run the Similarity Analysis before you can plot parameters')
+%else
+%    handles = plotSimAnalysis(handles);
+%end
+%guidata(hObject, handles);
 
 function check_showSimInts_Callback(hObject, eventdata, handles)
 %Check to verify that the decomp model has previously been run
-if ~isfield(handles, 'simAnalysis')
-    set(handles.text_message, 'String', 'You need to run the Similarity Analysis before you can plot parameters')
-else
-    handles = plotSimAnalysis(handles);
-end
+%if ~isfield(handles, 'simAnalysis')
+%    set(handles.text_message, 'String', 'You need to run the Similarity Analysis before you can plot parameters')
+%else
+%    handles = plotSimAnalysis(handles);
+%end
 
-guidata(hObject, handles);
+%guidata(hObject, handles);
 
 function listbox_simIntSelect_Callback(hObject, eventdata, handles)
 
-function listbox_simIntSelect_CreateFcn(hObject, eventdata, handles)
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
 
 function check_flags_Callback(hObject, eventdata, handles)
 
 function check_rms_Callback(hObject, eventdata, handles)
 
+function push_motifSim_Callback(hObject, eventdata, handles)
+
+function push_yinPitch_Callback(hObject, eventdata, handles)
+
+
+
+guidata(hObject, handles);
 
 function push_syls2Disk_Callback(hObject, eventdata, handles)
 % Cut up syllables into snips and write to disk for analysis elsewhere
-
-%Request the location for saving files
-parent = uigetdir(cd, 'Where to save these syllables?');
-
+parent = 'C:\Users\Tim\Desktop\MM2 Test Data\SAP Test\';
 %Parse Data
 handles.pData = parseData(handles);
 
@@ -1357,8 +1118,9 @@ for i = 1:numBins
         %Write each to disk
         for k = 1:numel(subSet)
             fname = [parent filesep fold1 filesep fold2 filesep num2str(k) '.wav'];
-            audiowrite(fname, subSet{k}, 44150);
+            wavwrite(subSet{k}, 44150, fname);
         end
+        
     end
     
     %Update waitbar
@@ -1370,24 +1132,63 @@ close(h)
 %   Save/export functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function push_saveRaw_Callback(hObject, eventdata, handles)
-%Capture all of the raw data that's been imported from file. No processing included.
-datasets = handles.dataset;
+function push_varianceDecompSave_Callback(hObject, eventdata, handles)
+% hObject    handle to push_varianceDecompSave (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+varDecSave.intervals = handles.sgLabels;
+varDecSave.modelstrct = handles.varComp.modelstrct;
+% do not need zero day
+%varDecSave.dataType = handles.contents(allVals);
+varDecSave.parseTime = str2num(get(handles.edit_parseTimes,'String'));
+varDecSave.parseNum = str2num(get(handles.edit_numMotifs,'String'));
+varDecSave.fileSets = get(handles.list_norm,'String');
+varDecSave.dt = handles.varComp.dt - varDecSave.zeroDay; 
 
-%Get location to save
-[SaveName,SavePath] = uiputfile('*.mat');
+[SaveName, SavePath] = uiputfile('*.mat');
+save([SavePath SaveName], 'varDecSave');
+set(handles.text_message, 'String', ['Variance decomposition data saved to a file at: ' SaveName]);
 
-%Save it
-save([SavePath SaveName],'datasets');
 
-%Notify user when done
-set(handles.text_message, 'String', ['Raw data saved to file at: ' SaveName]);
+% --- Executes on button press in push_spectralAnalysisSave.
+function push_spectralAnalysisSave_Callback(hObject, eventdata, handles)
+% hObject    handle to push_spectralAnalysisSave (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+specSave.intervals = handles.sgLabels;
+if isfield(handles, 'simAnalysis')
+    specSave.simAnalysis = handles.simAnalysis;
+end
+if isfield(handles, 'recAnalysis')
+    specSave.recAnalysis = handles.recAnalysis;
+end
+specSave.time = handles.dt-handles.zeroDay;
+% do not need zero day
+%specSave.int = int; % need to get int no matter what...
+%specSave.dataType = handles.contents(allVals);
+specSave.parseTime = str2num(get(handles.edit_parseTimes,'String'));
+specSave.parseNum = str2num(get(handles.edit_numMotifs,'String'));
+specSave.fileSets = get(handles.list_norm,'String');
 
-function push_saveFinal_Callback(hObject, eventdata, handles)
-dataOut = handles.saveData;
+[SaveName, SavePath] = uiputfile("*.mat");
+save([SavePath SaveName], 'specSave');
+set(handles.text_message, "String", ['Spectral Analysis data saved to a file at: ' SaveName]);
 
-[SaveName,SavePath] = uiputfile('*.mat');
-save([SavePath SaveName],'dataOut');
+% --- Executes on button press in push_temporalAnalysisSave.
+function push_temporalAnalysisSave_Callback(hObject, eventdata, handles)
+[c, r] = size(handles.pData);
+idx = 1;
+for i = 1:r
+    [c_i r_i] = size(handles.pData(i).filenames);
+    for j = 1:r_i
+        handles.tempData.filenames(idx) = handles.pData(i).filenames(j);
+        idx = idx + 1;
+    end
+end
+tempSave = handles.tempData;
+[SaveName, SavePath] = uiputfile("*.mat");
+save([SavePath, SaveName], 'tempSave');
+set(handles.text_message, 'String', ['Temporal Analysis data saved to a file at: ' SaveName]);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Misc functions
@@ -1432,11 +1233,179 @@ guidata(hObject, handles);
 
 function list_norm_Callback(hObject, eventdata, handles)
 
+function check_norm_Callback(hObject, eventdata, handles)
+
+function push_test1_Callback(hObject, eventdata, handles)
+
+function check_test2_Callback(hObject, eventdata, handles)
+
+% --- Executes on button press in push_plotVarianceDecomp.
+function push_plotVarianceDecomp_Callback(hObject, eventdata, handles) 
+handles = plotVarComp(handles);
+
+% --- Executes on button press in push_plotSyllSim.
+function push_plotSyllSim_Callback(hObject, eventdata, handles)
+handles = plotSimAnalysis(handles, 1);
+guidata(hObject, handles);
+
+% --- Executes on button press in push_plotSyllRecovery.
+function push_plotSyllRecovery_Callback(hObject, eventdata, handles)
+handles = plotSimAnalysis(handles, 0);
+guidata(hObject, handles);
+
+% --- Executes on button press in push_temporalAnalysis.
+function push_temporalAnalysis_Callback(hObject, eventdata, handles)
+% get all of the data that you would want to save!!
+% this function needs to get all of the stuff that is important to save
+% Consistent Features:
+% Parsing data
+handles.pData = parseData(handles);
+
+%Get interval selections from GUI controls
+handles.vals = get(handles.list_SylGap, 'Value');
+handles.contents = get(handles.list_SylGap, 'String');
+[valNum, x] = size(handles.contents);
+allVals = 1:valNum;
+if get(handles.radio_SylsGaps,'Value')
+    handles.intType = 1;
+else
+    handles.intType = 0;
+end
+
+%Get zeroDay for plotting
+handles.zeroDay = datenum(get(handles.edit_zeroDay, 'String'), 'mm/dd/yy');
+
+handles.numBins = length(handles.pData);
+
+% get most of the important data
+int = [];
+dt = [];
+for i = 1:handles.numBins
+    len = size(handles.pData(i).intervals,1);
+    indx{i} = (size(int,1)+1):(size(int,1)+len);
+    for j = 1:length(allVals)
+        if allVals(j) ~= length(handles.contents) && handles.intType %Syl and Gap, not total, selected
+            int(indx{i}, j) = handles.pData(i).intervals(:,vals(j));
+            int_m(i, j) = mean(handles.pData(i).intervals(:,vals(j)));
+            int_std(i, j) = std(handles.pData(i).intervals(:,vals(j)));
+        elseif allVals(j) ~= length(handles.contents) && ~handles.intType %Syl+Gap, not total, selected
+            if allVals(j) ~= (length(handles.contents) -1) %requires summing syl and gap
+                pntr = (2*allVals(j)-1):(2*allVals(j));
+            else
+                pntr = (2*allVals(j)-1); %last syl, so no gap to add
+            end
+            int(indx{i}, j) = sum(handles.pData(i).intervals(:,pntr), 2);
+            int_m(i, j) = mean(sum(handles.pData(i).intervals(:,pntr), 2));
+            int_std(i, j) = std(sum(handles.pData(i).intervals(:,pntr), 2));
+        elseif allVals(j) == length(handles.contents) %Total selected
+            int(indx{i}, j) = sum(handles.pData(i).intervals, 2);
+            int_m(i, j) = mean(sum(handles.pData(i).intervals, 2));
+            int_std(i, j) = std(sum(handles.pData(i).intervals, 2));
+        end
+    end
+
+    %Calc/format timepoints
+    alldt(indx{i}) = (handles.pData(i).date + (handles.pData(i).time/24));
+    
+    %Calc/format timepoints
+    dt(i) = (handles.pData(i).date(1) + (handles.pData(i).time(1)/24));
+end
+
+%Calc the CV
+int_cv = int_std./int_m;
+
+% Normalize data, if selected
+
+if get(handles.check_norm, 'Value')
+  mind = [];
+  int_cv = normData(get(handles.list_norm, 'Value'), int_cv);
+  int_std = int_std./int_m;
+  int_m = normData(get(handles.list_norm, 'Value'), int_m);
+  for i = get(handles.list_norm, 'Value')
+      mInd = [mInd indx{i}];
+  end
+  int = normData(mInd, int)
+end
+
+handles.int = int;
+handles.int_cv = int_cv;
+handles.int_std = int_std;
+handles.int_m = int_m;
+handles.time = dt - handles.zeroDay;
+handles.dt = dt; 
+handles.alldt = alldt;
+
+% important data to save
+handles.tempData.time = dt-handles.zeroDay;
+% do not need zero day
+handles.tempData.int = int; % need to get int no matter what...
+handles.tempData.dataType = handles.contents(allVals);
+handles.tempData.parseTime = str2num(get(handles.edit_parseTimes,'String'));
+handles.tempData.parseNum = str2num(get(handles.edit_numMotifs,'String'));
+handles.tempData.fileSets = get(handles.list_norm,'String');
+
+set(handles.text_message,'String','Temporal Analysis complete');
+
+guidata(hObject, handles);
+
+function popup_tempAnalysis_Callback(hObject, eventdata, handles)
+
+function popup_specAnalysis_Callback(hObject, eventdata, handles)
+
+function push_plotTemp_Callback(hObject, eventdata, handles)
+plotTempAnalysis(handles);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%         "Create" Functions           %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+% --- Executes during object creation, after setting all properties.
+function popup_specAnalysis_CreateFcn(hObject, eventdata, handles)
+
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function popup_tempAnalysis_CreateFcn(hObject, eventdata, handles)
+
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
 function list_norm_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-function check_norm_Callback(hObject, eventdata, handles)
+function listbox_simIntSelect_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
 
-function push_test1_Callback(hObject, eventdata, handles)
+function popup_varPSelect_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function edit_zeroDay_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function edit_numMotifs_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function listbox_datasets_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function edit_parseTimes_CreateFcn(hObject, eventdata, handles)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+%%%% FUNCTION: ISPC???????????? %%%%%%%%%%%
