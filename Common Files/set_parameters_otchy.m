@@ -30,8 +30,8 @@ par.detect_fmin = 300;                 % high pass filter for detection
 par.detect_fmax = 3000;                 % low pass filter for detection (default 1000)
 par.sort_fmin = 300;                   % high pass filter for sorting 
 par.sort_fmax = 3000;                   % low pass filter for sorting (default 3000)
-%par.detection = 'pos';                % type of threshold
-par.detection = 'neg';
+par.detection = 'pos';                % type of threshold
+%par.detection = 'neg';
 % par.detection = 'both';
 par.segments = 4;                    % nr. of segments in which the data is cutted.
 
